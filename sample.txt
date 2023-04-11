@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Check if two arguments are provided
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 <csv_file1> <csv_file2>"
+    exit 1
+fi
+
+# Remove header from both CSV files and sort the remaining lines
+file1_sorted=$(mktemp)
+file2_sorted=$(mktemp)
+
+awk 'NR > 1' "$1" | sort > "$file1_sorted"
+awk 'NR > 1' "$2" | sort > "$file2_sorted"
+
+# Compare the sorted files and output the differences to a text file
+output_file="differences.txt"
+diff -u "$file1_sorted" "$file2_sorted" > "$output_file"
+
+# Clean up temporary files
+rm "$file1_sorted"
+rm "$file2_sorted"
+
+echo "Differences saved to $output_file"
