@@ -30,17 +30,23 @@ compare_csv_files() {
     awk 'NR > 1' "$file1" | sort > "$file1_sorted"
     awk 'NR > 1' "$file2" | sort > "$file2_sorted"
 
-    diff -u "$file1_sorted" "$file2_sorted" > "$output_file"
+    # Compare the sorted files and store the differences in a variable
+    differences=$(diff -u "$file1_sorted" "$file2_sorted")
+
+    # If there are differences, save them to the output file
+    if [ -n "$differences" ]; then
+        echo "$differences" > "$output_file"
+        echo "Differences saved to $output_file"
+    else
+        echo "No differences found"
+    fi
 
     rm "$file1_sorted"
     rm "$file2_sorted"
-
-    echo "Differences saved to $output_file"
 }
 
 # Read the temporary CSV file line by line and perform comparisons
-while IFS=',' read -r identifier file1 file2; do
-    output_file="${identifier}_differences.txt"
+while IFS=',' read -r file1 file2 output_file; do
     compare_csv_files "$file1" "$file2" "$output_file"
 done < <(tail -n +2 "$temp_csv")
 
