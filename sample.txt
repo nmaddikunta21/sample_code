@@ -30,15 +30,14 @@ compare_csv_files() {
     awk 'NR > 1' "$file1" | sort > "$file1_sorted"
     awk 'NR > 1' "$file2" | sort > "$file2_sorted"
 
-    # Compare the sorted files and store the differences in a variable
-    differences=$(diff -u "$file1_sorted" "$file2_sorted")
+    local differences=$(diff --unchanged-line-format='' --old-line-format='- %L' --new-line-format='+ %L' "$file1_sorted" "$file2_sorted")
+    local diff_exit_status=$?
 
-    # If there are differences, save them to the output file
-    if [ -n "$differences" ]; then
+    if [ $diff_exit_status -ne 0 ]; then
         echo "$differences" > "$output_file"
         echo "Differences saved to $output_file"
     else
-        echo "No differences found"
+        echo "No differences found between $file1 and $file2"
     fi
 
     rm "$file1_sorted"
