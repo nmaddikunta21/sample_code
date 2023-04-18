@@ -1,53 +1,19 @@
 #!/bin/bash
 
-# Check if one argument is provided
-if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <excel_file>"
-    exit 1
-fi
+# Set the prefixes and corresponding destination directories
+declare -A prefixes=( ["example_"]="/path/to/example/destination/directory" ["test_"]="/path/to/test/destination/directory" )
 
-# Check if csvkit is installed
-if ! command -v in2csv &> /dev/null; then
-    echo "csvkit is not installed. Please install it first."
-    echo "You can install it using pip: pip install csvkit"
-    exit 1
-fi
+# Set the source directory
+src_dir="/path/to/source/directory"
 
-# Convert the Excel file to a temporary CSV file
-excel_file="$1"
-temp_csv=$(mktemp)
-in2csv "$excel_file" > "$temp_csv"
-
-# Function to compare two CSV files and save the differences
-compare_csv_files() {
-    local file1="$1"
-    local file2="$2"
-    local output_file="$3"
-
-    local file1_sorted=$(mktemp)
-    local file2_sorted=$(mktemp)
-
-    awk 'NR > 1' "$file1" | sort > "$file1_sorted"
-    awk 'NR > 1' "$file2" | sort > "$file2_sorted"
-
-    local differences=$(diff --unchanged-line-format='' --old-line-format='- %L' --new-line-format='+ %L' "$file1_sorted" "$file2_sorted")
-    local diff_exit_status=$?
-
-    if [ $diff_exit_status -ne 0 ]; then
-        echo "$differences" > "$output_file"
-        echo "Differences saved to $output_file"
-    else
-        echo "No differences found between $file1 and $file2"
+# Loop through the files in the source directory
+for file in "${src_dir}"/*; do
+  # Loop through each prefix
+  for prefix in "${!prefixes[@]}"; do
+    # Check if the file starts with the current prefix
+    if [[ "$file" == "${src_dir}/${prefix}"* ]]; then
+      # Copy the file to the corresponding destination directory
+      cp "$file" "${prefixes[$prefix]}"
     fi
-
-    rm "$file1_sorted"
-    rm "$file2_sorted"
-}
-
-# Read the temporary CSV file line by line and perform comparisons
-while IFS=',' read -r file1 file2 output_file; do
-    compare_csv_files "$file1" "$file2" "$output_file"
-done < <(tail -n +2 "$temp_csv")
-
-# Clean up the temporary CSV file
-rm "$temp_csv"
+  done
+done
