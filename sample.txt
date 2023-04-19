@@ -3,17 +3,23 @@
 # Set the prefixes and corresponding destination directories
 declare -A prefixes=( ["example_"]="/path/to/example/destination/directory" ["test_"]="/path/to/test/destination/directory" )
 
-# Set the source directory
-src_dir="/path/to/source/directory"
+# Set the source directories
+src_dir1="/path/to/source/directory1"
+src_dir2="/path/to/source/directory2"
 
-# Loop through the files in the source directory
-for file in "${src_dir}"/*; do
+# Loop through the files in the first source directory
+for file in "${src_dir1}"/*; do
   # Loop through each prefix
   for prefix in "${!prefixes[@]}"; do
     # Check if the file starts with the current prefix
-    if [[ "$file" == "${src_dir}/${prefix}"* ]]; then
+    if [[ "$file" == "${src_dir1}/${prefix}"* ]]; then
       # Copy the file to the corresponding destination directory
       cp "$file" "${prefixes[$prefix]}"
     fi
   done
+done
+
+# Copy all zip files from the second source directory to a separate destination directory
+for file in "${src_dir2}"/*.zip; do
+  cp "$file" "/path/to/zip/destination/directory"
 done
