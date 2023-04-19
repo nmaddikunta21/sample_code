@@ -42,6 +42,9 @@ st.sidebar.subheader("Input Field 1")
 inputs2 = st.sidebar.text_input("Enter values separated by commas")
 st.sidebar.subheader("Input Field 2")
 
+# Create an empty list to store the file paths of the downloaded results
+file_paths = []
+
 # Load the first DataFrame based on the user's input, if given
 if inputs1:
     df1 = load_dataframe1([x.strip() for x in inputs1.split(',')])
@@ -50,9 +53,9 @@ if inputs1:
     
     # Add a button to download the first DataFrame, but only if inputs were given
     if st.button("Download First DataFrame"):
-        with zipfile.ZipFile("first_dataframe.zip", "w") as zip:
-            zip.writestr("first_dataframe.csv", df1.to_csv(index=False))
-        st.markdown("Download the first DataFrame: [first_dataframe.zip](first_dataframe.zip)")
+        file_path = "first_dataframe.csv"
+        df1.to_csv(file_path, index=False)
+        file_paths.append(file_path)
 
 # Load the second DataFrame based on the user's input, if given
 if inputs2:
@@ -62,6 +65,18 @@ if inputs2:
     
     # Add a button to download the second DataFrame, but only if inputs were given
     if st.button("Download Second DataFrame"):
-        with zipfile.ZipFile("second_dataframe.zip", "w") as zip:
-            zip.writestr("second_dataframe.csv", df2.to_csv(index=False))
-        st.markdown("Download the second DataFrame: [second_dataframe.zip](second_dataframe.zip)")
+        file_path = "second_dataframe.csv"
+        df2.to_csv(file_path, index=False)
+        file_paths.append(file_path)
+
+# Add a button to download the results, but only if at least one download button was clicked
+if file_paths:
+    if st.button("Download Results"):
+        with zipfile.ZipFile("results.zip", "w") as zip:
+            for file_path in file_paths:
+                zip.write(file_path)
+        st.markdown("Download the results: [results.zip](results.zip)")
+        
+        # Remove the temporary CSV files
+        for file_path in file_paths:
+            os.remove(file_path)
