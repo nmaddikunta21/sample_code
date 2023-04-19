@@ -32,7 +32,17 @@ def load_dataframe2(inputs):
     return df
 
 # Set the app title
-st.title("My App")
+st.set_page_config(page_title="My App", page_icon=":guardsman:", layout="wide")
+
+# Add a button to download the script
+st.button("Download script", on_click=lambda: download_script(__file__))
+
+def download_script(script_path):
+    script = open(script_path, 'r')
+    script_content = script.read()
+    b64 = base64.b64encode(script_content.encode()).decode()
+    href = f'<a href="data:file/txt;base64,{b64}" download="app.py">Download script</a>'
+    st.markdown(href, unsafe_allow_html=True)
 
 # Add a sidebar with an input field for the first DataFrame
 inputs1 = st.sidebar.text_input("Enter values separated by commas")
@@ -72,11 +82,4 @@ if inputs2:
 # Add a button to download the results, but only if at least one download button was clicked
 if file_paths:
     if st.button("Download Results"):
-        with zipfile.ZipFile("results.zip", "w") as zip:
-            for file_path in file_paths:
-                zip.write(file_path)
-        st.markdown("Download the results: [results.zip](results.zip)")
-        
-        # Remove the temporary CSV files
-        for file_path in file_paths:
-            os.remove(file_path)
+        with zipfile.Zip
