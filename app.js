@@ -1,234 +1,157 @@
 import React, { useState, useEffect } from "react";
-import AppBar from "@mui/material/AppBar";
-import Toolbar from "@mui/material/Toolbar";
-import IconButton from "@mui/material/IconButton";
-import TextField from "@mui/material/TextField";
-import Box from "@mui/material/Box";
-import { Search, Clear } from "@mui/icons-material";
-import InputAdornment from "@mui/material/InputAdornment";
-import Select from "@mui/material/Select";
-import MenuItem from "@mui/material/MenuItem";
+import MyAppBar from "./components/AppBar";
+import CardBar from "./components/CardBar";
+import ArticleView from "./components/ArticleView";
+import SortControl from "./components/SortControl";
+import { Paper } from "@mui/material";
+
+const App = () => {
+  const [articles, setArticles] = useState([]);
+  const [selectedArticle, setSelectedArticle] = useState(null);
+  const [sortType, setSortType] = useState("date");
+
+  const fetchArticles = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/");
+      let data = await response.json();
+
+      // Sort articles based on sortType state
+      if (sortType === "date") {
+        data.sort(
+          (a, b) => new Date(b.published_date) - new Date(a.published_date)
+        );
+      } else if (sortType === "duration") {
+        data.sort((a, b) => a.duration.localeCompare(b.duration));
+      }
+
+      setArticles(data);
+      setSelectedArticle(data[0]);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    fetchArticles();
+  }, [sortType]);
+
+  const handleSortChange = (event) => {
+    setSortType(event.target.value);
+  };
+
+  return (
+    <Paper elevation={3} style={{ maxWidth: "80%", margin: "auto" }}>
+      <MyAppBar />
+      <SortControl value={sortType} onChange={handleSortChange} />
+      {articles.length > 0 && (
+        <CardBar articles={articles} onCardClick={setSelectedArticle} />
+      )}
+      {selectedArticle && <ArticleView article={selectedArticle} />}
+    </Paper>
+  );
+};
+
+export default App;
+
+
+
+
+// CardBar.js
+
+import React from "react";
+import { Card, CardContent, Typography } from "@mui/material";
+
+const CardBar = ({ articles, onCardClick }) => {
+  return (
+    <div style={{ display: "flex", overflowX: "scroll" }}>
+      {articles.map((article, index) => (
+        <Card key={index} onClick={() => onCardClick(article)}>
+          <CardContent>
+            <Typography variant="h5">{article.headline}</Typography>
+            <Typography variant="body2">{article.teaser}</Typography>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+};
+
+export default CardBar;
+
+
+
+import React from "react";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Typography from "@mui/material/Typography";
-import Tab from "@mui/material/Tab";
-import Tabs from "@mui/material/Tabs";
-import CardActions from "@mui/material/CardActions";
-import Collapse from "@mui/material/Collapse";
-import CloseIcon from "@mui/icons-material/Close";
-import Button from "@mui/material/Button";
 
-const App = () => {
-  const [searchText, setSearchText] = useState("");
-  const [selectedOption, setSelectedOption] = useState("");
-  const [data, setData] = useState(null); // State variable for data
-  const [value, setValue] = useState(0);
-  const [expandedCard, setExpandedCard] = useState([]);
-  const [activeButton, setActiveButton] = useState([]);
+const MyCard = ({ article }) => (
+  <Card>
+    <CardContent>
+      <Typography variant="h5">{article.headline}</Typography>
+      <Typography variant="body2">{article.teaser}</Typography>
+    </CardContent>
+  </Card>
+);
 
-  useEffect(() => {
-    // Fetch data from API when component mounts
-    fetch("http://localhost:8000/")
-      .then((response) => response.json())
-      .then((data) => setData(data))
-      .catch((error) => console.error(error));
-  }, []);
+export default MyCard;
 
-  const handleSearchChange = (event) => {
-    setSearchText(event.target.value);
-  };
 
-  const handleSearchSubmit = (event) => {
-    event.preventDefault();
-    fetchData(searchText);
-  };
+// SortControl.js
 
-  const fetchData = (searchText) => {
-    fetch("http://localhost:8000/search", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ value: searchText }),
-    })
-      .then((response) => response.json())
-      .then((data) => setData(data))
-      .catch((error) => console.error(error));
-  };
+import React from "react";
+import { FormControlLabel, Radio, RadioGroup } from "@mui/material";
 
-  const handleSearchClear = () => {
-    setSearchText("");
-  };
+const SortControl = ({ value, onChange }) => {
+  return (
+    <RadioGroup row value={value} onChange={onChange}>
+      <FormControlLabel value="date" control={<Radio />} label="Recency Date" />
+      <FormControlLabel value="duration" control={<Radio />} label="Duration" />
+    </RadioGroup>
+  );
+};
+
+export default SortControl;
+
+
+
+// ArticleView.js
+
+import React from "react";
+import { Paper, Tab, Tabs, Typography, Box } from "@mui/material";
+
+const ArticleView = ({ article }) => {
+  const [value, setValue] = React.useState(0);
 
   const handleChange = (event, newValue) => {
     setValue(newValue);
   };
 
-  const handleSelectChange = (event) => {
-    setSelectedOption(event.target.value);
-  };
-
-  const handleTabClick = (index, section) => {
-    setExpandedCard((prevExpandedCard) => {
-      let newExpandedCard = [...prevExpandedCard];
-      let newActiveButton = [...activeButton]; // copy the current state
-
-      if (!newExpandedCard[index]) {
-        newExpandedCard[index] = {};
-      }
-
-      // If the clicked section is already open, close it
-      if (newExpandedCard[index].openSection === section) {
-        newExpandedCard[index].openSection = null;
-        newActiveButton[index] = null; // no active button if section is closed
-      } else {
-        // Otherwise, open the clicked section and close any others
-        newExpandedCard[index].openSection = section;
-        newActiveButton[index] = section; // update active button
-      }
-
-      setActiveButton(newActiveButton); // set the new state
-      return newExpandedCard;
-    });
-  };
-
   return (
-    <Box style={{ height: "100%" }}>
-      <AppBar position="static" style={{ backgroundColor: "green" }}>
-        <Toolbar>Social Media Post Generator</Toolbar>
-      </AppBar>
-      <Box display="flex" p={2} style={{ height: "100%" }}>
-        <Box flexBasis="60%" borderRight={1} borderColor="grey.500" ml={2}>
-          <Box
-            display="block"
-            justifyContent="center"
-            alignItems="top"
-            style={{ height: "100%" }}
-          >
-            <Box display="flex" flexDirection="column">
-              <form onSubmit={handleSearchSubmit}>
-                <TextField
-                  style={{ marginLeft: "100px", width: "70%" }}
-                  fullWidth
-                  placeholder="Search articles"
-                  value={searchText}
-                  onChange={handleSearchChange}
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        {searchText && (
-                          <IconButton onClick={handleSearchClear}>
-                            <Clear />
-                          </IconButton>
-                        )}
-                      </InputAdornment>
-                    ),
-                    startAdornment: searchText ? (
-                      <InputAdornment position="start">
-                        <Search />
-                      </InputAdornment>
-                    ) : null,
-                  }}
-                />
-              </form>
-              <Box alignSelf="flex-end" width="20%" mt={2}>
-                <Select
-                  value={selectedOption}
-                  onChange={handleSelectChange}
-                  displayEmpty
-                  inputProps={{ "aria-label": "Without label" }}
-                  sx={{ height: "30px", width: "100px", fontSize: "0.875rem" }}
-                >
-                  <MenuItem value="">
-                    <em>None</em>
-                  </MenuItem>
-                  <MenuItem value={10}>Option 1</MenuItem>
-                  <MenuItem value={20}>Option 2</MenuItem>
-                  <MenuItem value={30}>Option 3</MenuItem>
-                </Select>
-              </Box>
-              <Box alignSelf="center" flexDirection="column" width="80%">
-                {Array.isArray(data) &&
-                  data.map((item, index) => (
-                    <Card sx={{ mt: 2 }} key={index}>
-                      <CardContent>
-                        <Typography variant="body1">{item.headline}</Typography>
-                      </CardContent>
-                      <CardActions
-                        disableSpacing
-                        alignSelf="center"
-                        display="block"
-                      >
-                        <Button
-                          style={
-                            activeButton[index] === "summary"
-                              ? { backgroundColor: "lightgray", color: "black" }
-                              : { color: "black" }
-                          }
-                          onClick={() => handleTabClick(index, "summary")}
-                        >
-                          Summary
-                        </Button>
-                        <Button
-                          style={
-                            activeButton[index] === "article"
-                              ? { backgroundColor: "lightgray", color: "black" }
-                              : { color: "black" }
-                          }
-                          onClick={() => handleTabClick(index, "article")}
-                        >
-                          Article
-                        </Button>
-                        <Button
-                          style={
-                            activeButton[index] === "ai_summary"
-                              ? { backgroundColor: "lightgray", color: "black" }
-                              : { color: "black" }
-                          }
-                          onClick={() => handleTabClick(index, "ai_summary")}
-                        >
-                          AI Summary
-                        </Button>
-                      </CardActions>
-                      <Collapse
-                        in={expandedCard[index]?.openSection === "summary"}
-                        timeout="auto"
-                        unmountOnExit
-                      >
-                        <CardContent>
-                          <Typography paragraph>{item.summary}</Typography>
-                        </CardContent>
-                      </Collapse>
-                      <Collapse
-                        in={expandedCard[index]?.openSection === "article"}
-                        timeout="auto"
-                        unmountOnExit
-                      >
-                        <CardContent>
-                          <Typography paragraph>{item.article}</Typography>
-                        </CardContent>
-                      </Collapse>
-                      <Collapse
-                        in={expandedCard[index]?.openSection === "ai_summary"}
-                        timeout="auto"
-                        unmountOnExit
-                      >
-                        <CardContent>
-                          <Typography paragraph>{item.ai_summary}</Typography>
-                        </CardContent>
-                      </Collapse>
-                    </Card>
-                  ))}
-              </Box>
-            </Box>
-          </Box>
+    <Paper sx={{ flexGrow: 1, backgroundColor: "grey" }}>
+      <Tabs value={value} onChange={handleChange} centered>
+        <Tab label="Article" />
+        <Tab label="Key Takeaways" />
+        <Tab label="AI Summary" />
+      </Tabs>
+      {value === 0 && (
+        <Box p={3}>
+          <Typography>{article.article}</Typography>
         </Box>
-        <Box flexBasis="20%" ml={2}>
-          Post Generator
+      )}
+      {value === 1 && (
+        <Box p={3}>
+          <Typography>{article.summary}</Typography>
         </Box>
-      </Box>
-    </Box>
+      )}
+      {value === 2 && (
+        <Box p={3}>
+          <Typography>{article.ai_summary}</Typography>
+        </Box>
+      )}
+    </Paper>
   );
 };
 
-export default App;
+export default ArticleView;
+
