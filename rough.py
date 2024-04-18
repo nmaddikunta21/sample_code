@@ -1,85 +1,120 @@
-import os
-import streamlit as st
 import pandas as pd
-import zipfile
+from datetime import datetime
 
-# Define a function to load the first DataFrame from a folder based on user input
-def load_dataframe1(inputs):
-    # Get a list of all CSV files in the data folder
-    files = [f for f in os.listdir('data') if f.endswith('.csv')]
-    
-    # Load each CSV file into a DataFrame and concatenate them
-    df = pd.concat([pd.read_csv(os.path.join('data', f)) for f in files])
-    
-    # Filter the DataFrame based on the user's input
-    if inputs:
-        df = df[df['column'].isin(inputs)]
-    
-    return df
+class PreprocessingManager:
+    """
+    A class to manage preprocessing of customer data linking due dates and associate assignments.
 
-# Define a function to load the second DataFrame from a folder based on user input
-def load_dataframe2(inputs):
-    # Get a list of all CSV files in the data2 folder
-    files = [f for f in os.listdir('data2') if f.endswith('.csv')]
-    
-    # Load each CSV file into a DataFrame and concatenate them
-    df = pd.concat([pd.read_csv(os.path.join('data2', f)) for f in files])
-    
-    # Filter the DataFrame based on the user's input
-    if inputs:
-        df = df[df['column'].isin(inputs)]
-    
-    return df
+    Attributes:
+    customer_due_dates (pd.DataFrame): DataFrame containing customer IDs and their due dates.
+    customer_associates (pd.DataFrame): DataFrame linking customer IDs to associates.
 
-# Set the app title
-st.set_page_config(page_title="My App", page_icon=":guardsman:", layout="wide")
+    Methods:
+    process(): Processes input data to prepare it for workload management.
+    """
+    def __init__(self, customer_due_dates: pd.DataFrame, customer_associates: pd.DataFrame):
+        """
+        Initializes the PreprocessingManager with customer due dates and associate assignments.
+        """
+        self.customer_due_dates = customer_due_dates
+        self.customer_associates = customer_associates
 
-# Add a button to download the script
-st.button("Download script", on_click=lambda: download_script(__file__))
+    def process(self) -> (dict, pd.DataFrame):
+        """
+        Processes the input DataFrames to merge and create a dictionary mapping associates to their daily work item arrivals.
 
-def download_script(script_path):
-    script = open(script_path, 'r')
-    script_content = script.read()
-    b64 = base64.b64encode(script_content.encode()).decode()
-    href = f'<a href="data:file/txt;base64,{b64}" download="app.py">Download script</a>'
-    st.markdown(href, unsafe_allow_html=True)
+        Returns:
+        tuple: A tuple containing a dictionary with associate names as keys and dictionaries of day offsets with work item counts as values,
+               and the merged DataFrame with additional 'day_offset' column.
+        """
+        # Merge the two dataframes on the customer_id field
+        merged_data = pd.merge(self.customer_due_dates, self.customer_associates, on='customer_id')
+        
+        # Convert 'due_date' from string to datetime and calculate the number of days from today
+        base_date = datetime.today().date()
+        merged_data['due_date'] = pd.to_datetime(merged_data['due_date']).dt.date
+        merged_data['day_offset'] = (merged_data['due_date'] - base_date).days
+        
+        # Group by 'associate_name' and count occurrences per 'day_offset'
+        associate_arrivals = {}
+        for name, group in merged_data.groupby('associate_name'):
+            daily_arrivals = group['day_offset'].value_counts().to_dict()
+            associate_arrivals[name] = daily_arrivals
+        
+        return associate_arrivals, merged_data
 
-# Add a sidebar with an input field for the first DataFrame
-inputs1 = st.sidebar.text_input("Enter values separated by commas")
-st.sidebar.subheader("Input Field 1")
 
-# Add a sidebar with an input field for the second DataFrame
-inputs2 = st.sidebar.text_input("Enter values separated by commas")
-st.sidebar.subheader("Input Field 2")
 
-# Create an empty list to store the file paths of the downloaded results
-file_paths = []
 
-# Load the first DataFrame based on the user's input, if given
-if inputs1:
-    df1 = load_dataframe1([x.strip() for x in inputs1.split(',')])
-    st.write("First DataFrame")
-    st.write(df1)
-    
-    # Add a button to download the first DataFrame, but only if inputs were given
-    if st.button("Download First DataFrame"):
-        file_path = "first_dataframe.csv"
-        df1.to_csv(file_path, index=False)
-        file_paths.append(file_path)
 
-# Load the second DataFrame based on the user's input, if given
-if inputs2:
-    df2 = load_dataframe2([x.strip() for x in inputs2.split(',')])
-    st.write("Second DataFrame")
-    st.write(df2)
-    
-    # Add a button to download the second DataFrame, but only if inputs were given
-    if st.button("Download Second DataFrame"):
-        file_path = "second_dataframe.csv"
-        df2.to_csv(file_path, index=False)
-        file_paths.append(file_path)
+import json
 
-# Add a button to download the results, but only if at least one download button was clicked
-if file_paths:
-    if st.button("Download Results"):
-        with zipfile.Zip
+class WorkloadManager:
+    """
+    A class to manage workload assignments based on the processing results.
+
+    Attributes:
+    associates (dict): Dictionary containing associate details.
+    completion_rate (int): Universal completion rate for all associates.
+    average_unknown (int): Universal average of unexpected work items.
+    planning_horizon (int): Number of days to plan ahead.
+
+    Methods:
+    can_assign_new_item(associate_name, arrival_dates): Checks if a new work item can be assigned to an associate.
+    """
+    def __init__(self, associates: dict, config_path: str):
+        """
+        Initializes the WorkloadManager with associate details and configuration settings.
+        
+        Parameters:
+        associates (dict): Dictionary with keys as associate names and values as their details.
+        config_path (str): Path to the JSON configuration file.
+        """
+        self.associates = associates
+        with open(config_path, 'r') as config_file:
+            config = json.load(config_file)
+        self.completion_rate = config["completion_rate"]
+        self.average_unknown = config["average_unknown"]
+        self.planning_horizon = config["planning_horizon"]
+
+    def can_assign_new_item(self, associate_name: str, arrival_dates: dict) -> bool:
+        """
+        Determines whether a new work item can be assigned to an associate without exceeding their capacity.
+
+        Parameters:
+        associate_name (str): Name of the associate.
+        arrival_dates (dict): Dictionary with days as keys and number of arriving items as values.
+
+        Returns:
+        bool: True if the item can be assigned, False otherwise.
+        """
+        associate = self.associates[associate_name]
+        future_workload = associate['current_workload'] + 1
+        for day in range(self.planning_horizon):
+            new_items_today = arrival_dates.get(day, 0)
+            future_workload = min(future_workload - self.completion_rate + new_items_today + self.average_unknown,
+                                  associate['capacity'])
+            if future_workload > associate['capacity']:
+                return False
+        return True
+
+
+
+
+from preprocessing_manager import PreprocessingManager
+from workload_manager import WorkloadManager
+import pandas as pd
+
+class ProgramExecutor:
+    """
+    Class to execute the entire program by integrating preprocessing and workload management.
+
+    Methods:
+    execute(): Executes the preprocessing and assignment and returns results.
+    """
+    def __init__(self, customer_due_dates: pd.DataFrame, customer_associates: pd.DataFrame, associates: dict, config_path: str):
+        """
+        Initializes ProgramExecutor with necessary data and configurations.
+
+        Parameters:
+        customer_due_dates (pd.DataFrame): DataFrame with customer IDs and
