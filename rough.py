@@ -117,4 +117,47 @@ class ProgramExecutor:
         Initializes ProgramExecutor with necessary data and configurations.
 
         Parameters:
-        customer_due_dates (pd.DataFrame): DataFrame with customer IDs and
+        customer_due_dates (pd.DataFrame): DataFrame with customer IDs and due dates.
+        customer_associates (pd.DataFrame): DataFrame mapping customers to associates.
+        associates (dict): Dictionary with associate workload details.
+        config_path (str): Path to configuration file.
+        """
+        self.preprocessing_manager = PreprocessingManager(customer_due_dates, customer_associates)
+        self.workload_manager = WorkloadManager(associates, config_path)
+
+    def execute(self) -> pd.DataFrame:
+        """
+        Executes the workload assignment process and returns the assignment results.
+
+        Returns:
+        pd.DataFrame: DataFrame containing assignment results with customer details and assignment status.
+        """
+        associate_arrivals, merged_data = self.preprocessing_manager.process()
+        merged_data['assigned'] = False
+        for associate, arrivals in associate_arrivals.items():
+            if self.workload_manager.can_assign_new_item(associate, arrivals):
+                merged_data.loc[merged_data['associate_name'] == associate, 'assigned'] = True
+        return merged_data[['customer_id', 'due_date', 'associate_name', 'assigned']]
+
+
+
+from program_executor import ProgramExecutor
+import pandas as pd
+
+# Example Usage
+customer_due_dates = pd.DataFrame({
+    'customer_id': [1, 2, 3, 4, 5, 6],
+    'due_date': ['2023-11-25', '2023-11-26', '2023-11-25', '2023-11-27', '2023-11-26', '2023-11-27']
+})
+customer_associates = pd.DataFrame({
+    'customer_id': [1, 2, 3, 4, 5, 6],
+    'associate_name': ['John Doe', 'John Doe', 'Jane Smith', 'Jane Smith', 'John Doe', 'Jane Smith']
+})
+associates = {
+    "John Doe": {"current_workload": 10, "capacity": 15},
+    "Jane Smith": {"current_workload": 5, "capacity": 10}
+}
+
+executor = ProgramExecutor(customer_due_dates, customer_associates, associates, 'config.json')
+results_df = executor.execute()
+print(results_df)
