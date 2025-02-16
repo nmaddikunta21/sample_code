@@ -1,120 +1,135 @@
 import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 import os
-import logging
-from .util import Constants
 
-class DataLoader:
-    def __init__(self):
-        self.data_dir = Constants.DATA_DIRECTORY
-        self.prefixes = Constants.FILE_PREFIXES
-        self.open_work_items = None
-        self.office_pod_mapping = None
-        self.value_data = None
-        self.historical_assignments = None
+def load_data():
+    script_dir = os.path.dirname(__file__)
+    data_path = os.path.join(os.path.dirname(script_dir), 'output', 'sample_data.csv')
+    return pd.read_csv(data_path)
 
-    def load_data(self):
-        for key in self.prefixes:
-            data = self._load_single_file(key)
-            if data is not None:
-                setattr(self, key, data)
-                logging.info(f"{key} loaded successfully.")
-            else:
-                logging.warning(f"No data loaded for {key}.")
+def create_overall_funnel(df):
+    """Create an overall funnel visualization showing conversion at each stage."""
+    stages = ['Total', 'Assigned', 'Worked', 'Contacted', 'Appointment']
+    values = [
+        len(df),
+        df['assigned'].sum(),
+        df['worked'].sum(),
+        df['contacted'].sum(),
+        df['appointment'].sum()
+    ]
+    
+    fig = go.Figure(go.Funnel(
+        y=stages,
+        x=values,
+        textinfo="value+percent initial"
+    ))
+    
+    fig.update_layout(title='Overall Conversion Funnel',
+                     width=800,
+                     height=500)
+    return fig
 
-    def _load_single_file(self, key):
-        prefix = self.prefixes.get(key)
-        matching_files = [f for f in os.listdir(self.data_dir) if f.startswith(prefix) and f.endswith('.csv')]
-        if len(matching_files) > 1:
-            logging.error(f"Multiple files found with the prefix '{prefix}' in {self.data_dir}.")
-            return None
-        elif not matching_files:
-            logging.warning(f"No file matching the prefix '{prefix}' was found in {self.data_dir}")
-            return None
+def create_segment_funnel(df):
+    """Create funnel analysis by customer segment."""
+    segments = df['customer_segment'].unique()
+    fig = plt.figure(figsize=(12, 6))
+    
+    segment_metrics = []
+    for segment in segments:
+        segment_data = df[df['customer_segment'] == segment]
+        total = len(segment_data)
+        metrics = {
+            'Segment': segment,
+            'Assigned Rate': (segment_data['assigned'].sum() / total) * 100,
+            'Worked Rate': (segment_data['worked'].sum() / total) * 100,
+            'Contacted Rate': (segment_data['contacted'].sum() / total) * 100,
+            'Appointment Rate': (segment_data['appointment'].sum() / total) * 100
+        }
+        segment_metrics.append(metrics)
+    
+    segment_df = pd.DataFrame(segment_metrics)
+    segment_df_melted = pd.melt(segment_df, 
+                               id_vars=['Segment'],
+                               var_name='Stage',
+                               value_name='Conversion Rate')
+    
+    plt.figure(figsize=(12, 6))
+    sns.barplot(data=segment_df_melted, 
+                x='Stage', 
+                y='Conversion Rate', 
+                hue='Segment')
+    plt.xticks(rotation=45)
+    plt.title('Conversion Rates by Customer Segment')
+    plt.tight_layout()
+    return plt.gcf()
 
-        full_path = os.path.join(self.data_dir, matching_files[0])
-        try:
-            return pd.read_csv(full_path)
-        except Exception as e:
-            logging.error(f"An error occurred while loading data from {full_path}: {e}")
-            return None
+def create_region_funnel(df):
+    """Create funnel analysis by region."""
+    regions = df['region'].unique()
+    region_metrics = []
+    
+    for region in regions:
+        region_data = df[df['region'] == region]
+        total = len(region_data)
+        metrics = {
+            'Region': region,
+            'Assigned Rate': (region_data['assigned'].sum() / total) * 100,
+            'Worked Rate': (region_data['worked'].sum() / total) * 100,
+            'Contacted Rate': (region_data['contacted'].sum() / total) * 100,
+            'Appointment Rate': (region_data['appointment'].sum() / total) * 100
+        }
+        region_metrics.append(metrics)
+    
+    region_df = pd.DataFrame(region_metrics)
+    region_df_melted = pd.melt(region_df,
+                              id_vars=['Region'],
+                              var_name='Stage',
+                              value_name='Conversion Rate')
+    
+    plt.figure(figsize=(12, 6))
+    sns.barplot(data=region_df_melted,
+                x='Region',
+                y='Conversion Rate',
+                hue='Stage')
+    plt.title('Conversion Rates by Region')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    return plt.gcf()
 
-    def check_advisor_assignments(self):
-        if self.open_work_items is None or self.office_pod_mapping is None or self.value_data is None:
-            logging.error("Required datasets are not loaded.")
-            return
-        
-        # Assign gsp_type based on advisor presence
-        self.open_work_items['gsp_type'] = self.open_work_items['advisor_id'].apply(
-            lambda x: 'fc/vpfc' if x in self.office_pod_mapping['advisor'].values else 'imc'
-        )
-
-        # Merge customer values into open_work_items
-        self.merge_customer_values()
-
-        logging.info("Advisor assignments and customer values updated in open_work_items.")
-
-    def merge_customer_values(self):
-    """
-    Merges customer value into open_work_items using the 'id' column from open_work_items
-    and 'unique_id' from value_data. This method handles missing values by setting them to zero.
-    """
-    if 'id' not in self.open_work_items or 'unique_id' not in self.value_data:
-        logging.error("Required columns for merging are not present in the dataframes.")
-        return
-
-    # Perform the merge operation using left join
-    self.open_work_items = self.open_work_items.merge(
-        self.value_data[['unique_id', 'customer_value']],
-        left_on='id',
-        right_on='unique_id',
-        how='left'
-    )
-
-    # Optionally, handle missing values in 'customer_value' if necessary
-    self.open_work_items['customer_value'].fillna(0, inplace=True)
-
-    logging.info("Customer values successfully merged into open_work_items DataFrame.")
+def save_plots(figs, output_dir):
+    """Save all generated plots."""
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Save plotly figure
+    figs['overall'].write_html(os.path.join(output_dir, 'overall_funnel.html'))
+    
+    # Save matplotlib figures
+    figs['segment'].savefig(os.path.join(output_dir, 'segment_funnel.png'))
+    figs['region'].savefig(os.path.join(output_dir, 'region_funnel.png'))
 
 if __name__ == "__main__":
-    from logging_config import setup_logging
-    setup_logging()
-    loader = DataLoader()
-    loader.load_data()
-    loader.check_advisor_assignments()
-    # Optionally save the updated DataFrame
-    loader.open_work_items.to_csv(os.path.join(loader.data_dir, 'updated_open_work_items.csv'), index=False)
-    logging.info("Updated open_work_items saved.")
-
-
-import logging
-import os
-from datetime import datetime
-
-def setup_logging():
-    log_dir = 'logs'
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file_name = f"assignment_engine_{timestamp}.log"
-    log_file_path = os.path.join(log_dir, log_file_name)
-
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(levelname)s - %(module)s - %(message)s',
-                        handlers=[
-                            logging.FileHandler(log_file_path),
-                            logging.StreamHandler()  # To output to the console as well
-                        ])
-    logging.info("Logging setup complete.")
-
-class Constants:
-    """
-    A class to store all constant values, including file prefixes and the directory for data files.
-    """
-    DATA_DIRECTORY = 'data/'
-    FILE_PREFIXES = {
-        'open_work_items': 'open_work_items',
-        'value_data': 'value_data',
-        'office_pod_mapping': 'office_pod_mapping',
-        'historical_assignments': 'historical_assignments'
+    # Load the data
+    df = load_data()
+    
+    # Create output directory for plots
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'output', 'funnel_analysis')
+    
+    # Generate all funnel visualizations
+    figs = {
+        'overall': create_overall_funnel(df),
+        'segment': create_segment_funnel(df),
+        'region': create_region_funnel(df)
     }
+    
+    # Save all plots
+    save_plots(figs, output_dir)
+    
+    print(f"\nFunnel analysis plots have been saved to: {output_dir}")
+    print("Files generated:")
+    print("- overall_funnel.html (interactive)")
+    print("- segment_funnel.png")
+    print("- region_funnel.png")
