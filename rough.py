@@ -1,27 +1,24 @@
 import boto3
-import zipfile
-import os
-from io import BytesIO
 
-def unzip_s3_file(bucket_name, zip_file_key, extract_to_prefix):
+def copy_s3_files(bucket_name, source_prefix, destination_prefix):
     s3 = boto3.client('s3')
-
-    # Download the zip file from S3
-    zip_obj = s3.get_object(Bucket=bucket_name, Key=zip_file_key)
-    buffer = BytesIO(zip_obj['Body'].read())
-
-    # Unzip the file
-    with zipfile.ZipFile(buffer, 'r') as zip_ref:
-        for file_info in zip_ref.infolist():
-            file_name = file_info.filename
-            file_data = zip_ref.read(file_name)
-
-            # Upload the extracted file to S3
-            s3.put_object(Bucket=bucket_name, Key=os.path.join(extract_to_prefix, file_name), Body=file_data)
+    paginator = s3.get_paginator('list_objects_v2')
+    
+    # List all objects in the source prefix
+    for page in paginator.paginate(Bucket=bucket_name, Prefix=source_prefix):
+        if 'Contents' in page:
+            for obj in page['Contents']:
+                source_key = obj['Key']
+                destination_key = source_key.replace(source_prefix, destination_prefix, 1)
+                
+                # Copy the object
+                copy_source = {'Bucket': bucket_name, 'Key': source_key}
+                s3.copy_object(CopySource=copy_source, Bucket=bucket_name, Key=destination_key)
+                print(f'Copied {source_key} to {destination_key}')
 
 if __name__ == "__main__":
     bucket_name = 'your-bucket-name'
-    zip_file_key = 'path/to/your/zipfile.zip'
-    extract_to_prefix = 'path/to/extracted/files/'
+    source_prefix = 'source-folder/'
+    destination_prefix = 'destination-folder/'
 
-    unzip_s3_file(bucket_name, zip_file_key, extract_to_prefix)
+    copy_s3_files(bucket_name, source_prefix, destination_prefix)
