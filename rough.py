@@ -1,28 +1,40 @@
 import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import os
 
-def replace_invalid_dates(df: pd.DataFrame, date_column: str, max_valid_date: str):
-    # Convert the date column to datetime, setting errors='coerce' to handle invalid dates
-    df[date_column] = pd.to_datetime(df[date_column], errors='coerce')
+def distribution_analysis(csv_path: str, output_dir: str):
+    # Read data
+    df = pd.read_csv(csv_path)
     
-    # Define the maximum valid date
-    max_valid_date = pd.to_datetime(max_valid_date)
+    # Define columns to plot
+    numeric_cols = ['age', 'annual_income', 'credit_score']
+    funnel_cols = ['assigned', 'worked', 'contacted', 'appointment']
     
-    # Replace dates greater than the maximum valid date with the maximum valid date
-    df.loc[df[date_column] > max_valid_date, date_column] = max_valid_date
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
     
-    # Convert the datetime column back to string format
-    df[date_column] = df[date_column].dt.strftime('%Y-%m-%d')
+    # Plot numeric columns
+    for col in numeric_cols:
+        plt.figure(figsize=(8, 6))
+        sns.histplot(data=df, x=col, kde=True)
+        plt.title(f'{col} Distribution')
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, f'{col}_distribution.png'))
+        plt.close()
+        
+        plt.figure(figsize=(8, 6))
+        sns.boxplot(data=df, x=col)
+        plt.title(f'{col} Box Plot')
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, f'{col}_boxplot.png'))
+        plt.close()
     
-    return df
-
-if __name__ == "__main__":
-    # Sample data
-    data = {
-        'date_column': ['2025-01-01', '2999-12-31', '2262-04-10', '2262-04-12']
-    }
-    df = pd.DataFrame(data)
-    
-    # Replace invalid dates
-    df = replace_invalid_dates(df, 'date_column', '2262-04-11')
-    
-    print(df)
+    # Plot funnel columns
+    for col in funnel_cols:
+        plt.figure(figsize=(8, 6))
+        sns.countplot(data=df, x=col)
+        plt.title(f'{col} Distribution')
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, f'{col}_distribution.png'))
+        plt.close()
