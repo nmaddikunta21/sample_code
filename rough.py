@@ -2,6 +2,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import os
+import numpy as np
 
 def distribution_analysis(csv_path: str, output_dir: str):
     # Read data
@@ -22,19 +23,12 @@ def distribution_analysis(csv_path: str, output_dir: str):
         plt.tight_layout()
         plt.savefig(os.path.join(output_dir, f'{col}_distribution.png'))
         plt.close()
-        
-        plt.figure(figsize=(8, 6))
-        sns.boxplot(data=df, x=col)
-        plt.title(f'{col} Box Plot')
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f'{col}_boxplot.png'))
-        plt.close()
-    
-    # Plot funnel columns
-    for col in funnel_cols:
-        plt.figure(figsize=(8, 6))
-        sns.countplot(data=df, x=col)
-        plt.title(f'{col} Distribution')
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, f'{col}_distribution.png'))
-        plt.close()
+
+        # Plot log-transformed histogram if data is skewed
+        if df[col].min() > 0:  # Ensure all values are positive for log transformation
+            plt.figure(figsize=(8, 6))
+            sns.histplot(data=np.log(df[col]), kde=True)
+            plt.title(f'{col} Log-Transformed Distribution')
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_dir, f'{col}_log_distribution.png'))
+            plt.close()
