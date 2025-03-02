@@ -1,61 +1,61 @@
-import boto3
 import sagemaker
-from sagemaker.xgboost.model import XGBoostModel
+from sagemaker.estimator import Estimator
+import pandas as pd
+import boto3
 
-# Step 1: Setup SageMaker Session and S3 Bucket
+# Step 1: Set Up SageMaker Session & Role
 sagemaker_session = sagemaker.Session()
 role = sagemaker.get_execution_role()
-bucket = sagemaker_session.default_bucket()
-prefix = "xgboost-batch-inference-gpu"
 
-# Define paths
-test_data_file = "test.csv"  # Ensure this file is preprocessed
-s3_test_data = f"s3://{bucket}/{prefix}/test.csv"
-s3_output_path = f"s3://{bucket}/{prefix}/predictions/"
-
-# Step 2: Upload Test Data to S3
-s3 = boto3.client("s3")
-s3.upload_file(test_data_file, bucket, f"{prefix}/test.csv")
-print(f"Test dataset uploaded to: {s3_test_data}")
-
-# Step 3: Retrieve Trained Model from S3
+# Step 2: Retrieve the Trained Estimator
+# Use the model artifact from the completed training job
 model_artifact_path = "s3://your-bucket/xgboost-model-path/model.tar.gz"  # Update this path
 
-# Step 4: Create SageMaker XGBoost Model (GPU-Compatible)
-xgb_model = XGBoostModel(
-    model_data=model_artifact_path,
+xgb_estimator = Estimator(
+    image_uri=sagemaker.image_uris.retrieve("xgboost", sagemaker_session.boto_region_name, "1.5-1"),
     role=role,
-    framework_version="1.5-1"
-)
-
-# Step 5: Run Batch Inference on GPU
-transformer = xgb_model.transformer(
     instance_count=1,
     instance_type="ml.p3.2xlarge",  # ✅ Use GPU for inference
-    output_path=s3_output_path,
-    assemble_with="Line",
-    accept="text/csv"
+    model_data=model_artifact_path,  # ✅ Load trained model from S3
+    sagemaker_session=sagemaker_session
 )
 
-# Start Batch Transform on GPU
-transformer.transform(
-    data=s3_test_data,
-    content_type="text/csv",
-    split_type="Line",
-    input_filter="$[1:]",  # Ignore the first column if test data has labels
-    join_source="Input",
-    wait=True
+# Step 3: Deploy the Model as a Real-Time Endpoint
+predictor = xgb_estimator.deploy(
+    initial_instance_count=1,
+    instance_type="ml.p3.2xlarge",  # ✅ GPU Instance for fast inference
+    endpoint_name="xgboost-gpu-endpoint"  # ✅ Custom endpoint name
 )
 
-print(f"Batch inference completed! Predictions saved at: {s3_output_path}")
+print("Model deployed successfully!")
 
-# Step 6: Download and View Predictions
-local_predictions_file = "predictions.csv"
-s3.download_file(bucket, f"{prefix}/predictions/test.csv.out", local_predictions_file)
-print(f"Predictions downloaded as: {local_predictions_file}")
+# Step 4: Load Test Data for Inference
+test_data = pd.read_csv("test.csv", header=None)  # Ensure test.csv has no labels
+print("Test Data Shape:", test_data.shape)
 
-# Display Predictions
-import pandas as pd
-df_preds = pd.read_csv(local_predictions_file, header=None)
-print("Predictions Preview:")
-print(df_preds.head())
+# Step 5: Convert to CSV String (SageMaker expects CSV-formatted payload)
+payload = test_data.to_csv(index=False, header=False).encode("utf-8")
+
+# Step 6: Invoke the Deployed Endpoint for Real-Time Inference
+response = predictor.predict(payload)
+print("Raw Predictions:", response)
+
+# Step 7: Process Predictions
+import numpy as np
+
+# Convert response to numpy array
+predictions = np.array(response.splitlines()).astype(float)  # Adjust if using `multi:softprob`
+
+# If using `multi:softprob`, get class with highest probability
+if predictions.ndim > 1:
+    predicted_classes = np.argmax(predictions, axis=1)
+else:
+    predicted_classes = predictions.astype(int)
+
+print("Final Predicted Classes:", predicted_classes)
+
+# Step 8: Save Predictions to a CSV File
+df_predictions = pd.DataFrame(predicted_classes, columns=["Predicted_Class"])
+df_predictions.to_csv("predictions.csv", index=False)
+
+print("Predictions saved to predictions.csv")
