@@ -1,61 +1,39 @@
 import sagemaker
-from sagemaker.estimator import Estimator
-import pandas as pd
-import boto3
+from sagemaker import get_execution_role, Session
+from sagemaker.model import Model
 
-# Step 1: Set Up SageMaker Session & Role
-sagemaker_session = sagemaker.Session()
-role = sagemaker.get_execution_role()
+role = get_execution_role()
+session = Session()
 
-# Step 2: Retrieve the Trained Estimator
-# Use the model artifact from the completed training job
-model_artifact_path = "s3://your-bucket/xgboost-model-path/model.tar.gz"  # Update this path
+# The model artifact has been uploaded to S3 during training or otherwise
+model_data = "s3://my-bucket/path/model.tar.gz"
+image_uri = "<image-uri-of-your-inference-container>"
 
-xgb_estimator = Estimator(
-    image_uri=sagemaker.image_uris.retrieve("xgboost", sagemaker_session.boto_region_name, "1.5-1"),
+my_model = Model(
+    image_uri=image_uri,
+    model_data=model_data,
     role=role,
-    instance_count=1,
-    instance_type="ml.p3.2xlarge",  # ✅ Use GPU for inference
-    model_data=model_artifact_path,  # ✅ Load trained model from S3
-    sagemaker_session=sagemaker_session
+    sagemaker_session=session
 )
 
-# Step 3: Deploy the Model as a Real-Time Endpoint
-predictor = xgb_estimator.deploy(
-    initial_instance_count=1,
-    instance_type="ml.p3.2xlarge",  # ✅ GPU Instance for fast inference
-    endpoint_name="xgboost-gpu-endpoint"  # ✅ Custom endpoint name
+# Create a Transformer object from the model
+transformer = my_model.transformer(
+    instance_count=2,
+    instance_type="ml.m5.xlarge",
+    output_path="s3://my-bucket/path/batch_output",
+    max_concurrent_transforms=4,
+    max_payload_in_mb=50,
+    accept="text/csv"
 )
 
-print("Model deployed successfully!")
+# Run the batch transform job
+transformer.transform(
+    data="s3://my-bucket/path/batch_input/",
+    content_type="text/csv",
+    split_type="Line",
+    job_name="my-batch-job"
+)
+transformer.wait()  # Wait until the job is complete
 
-# Step 4: Load Test Data for Inference
-test_data = pd.read_csv("test.csv", header=None)  # Ensure test.csv has no labels
-print("Test Data Shape:", test_data.shape)
-
-# Step 5: Convert to CSV String (SageMaker expects CSV-formatted payload)
-payload = test_data.to_csv(index=False, header=False).encode("utf-8")
-
-# Step 6: Invoke the Deployed Endpoint for Real-Time Inference
-response = predictor.predict(payload)
-print("Raw Predictions:", response)
-
-# Step 7: Process Predictions
-import numpy as np
-
-# Convert response to numpy array
-predictions = np.array(response.splitlines()).astype(float)  # Adjust if using `multi:softprob`
-
-# If using `multi:softprob`, get class with highest probability
-if predictions.ndim > 1:
-    predicted_classes = np.argmax(predictions, axis=1)
-else:
-    predicted_classes = predictions.astype(int)
-
-print("Final Predicted Classes:", predicted_classes)
-
-# Step 8: Save Predictions to a CSV File
-df_predictions = pd.DataFrame(predicted_classes, columns=["Predicted_Class"])
-df_predictions.to_csv("predictions.csv", index=False)
-
-print("Predictions saved to predictions.csv")
+print("Batch transform job completed.")
+print("Output at:", transformer.output_path)
